@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Recommender Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #chatbox::-webkit-scrollbar {
+            width: 8px;
+        }
+        #chatbox::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        #chatbox::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        #chatbox::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+
+    <div class="bg-white w-full max-w-2xl h-full sm:h-auto sm:max-h-[700px] rounded-lg shadow-2xl flex flex-col">
+        <!-- Header -->
+        <div class="p-4 border-b bg-blue-600 text-white rounded-t-lg">
+            <h1 class="text-2xl font-bold text-center">Music Recommendation Bot</h1>
+            <p class="text-center text-blue-100 text-sm">Tell me what you'd like to hear!</p>
+        </div>
+
+        <!-- Chat Messages -->
+        <div id="chatbox" class="flex-1 p-6 overflow-y-auto">
+            <div class="flex flex-col gap-4">
+                <!-- Initial Bot Message -->
+                <div class="bot-message">
+                    <div class="bg-blue-500 text-white p-3 rounded-lg rounded-bl-none max-w-md shadow">
+                        <p>Hello! What kind of music are you in the mood for? You can ask for songs by artist, genre, year, mood, and more.</p>
+                        <p class="text-xs text-blue-200 mt-2">Try: "upbeat songs from the 90s"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 border-t bg-gray-50 rounded-b-lg">
+            <form id="chat-form" class="flex items-center space-x-3">
+                <input type="text" id="user-input" placeholder="e.g., happy songs by queen" class="flex-1 p-3 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300" autocomplete="off">
+                <button type="submit" id="send-btn" class="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-transform duration-200 transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const chatbox = document.getElementById('chatbox');
+        const sendBtn = document.getElementById('send-btn');
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            // For user messages, the data is just a string
+            appendMessage(message, 'user');
+            userInput.value = '';
+            setLoading(true);
+
+            try {
+                // Send message to the Flask backend
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // For bot replies, the data is an object: {reply: {text: "...", songs: [...]}}
+                appendMessage(data.reply, 'bot');
+
+            } catch (error) {
+                console.error('Error:', error);
+                // Ensure error messages are also sent in the correct object format
+                appendMessage({ text: 'Sorry, something went wrong on the server. Please try again later.', songs: [] }, 'bot');
+            } finally {
+                setLoading(false);
+            }
+        });
+        
+        function setLoading(isLoading) {
+            userInput.disabled = isLoading;
+            sendBtn.disabled = isLoading;
+            if (isLoading) {
+                sendBtn.innerHTML = `
+                    <svg class="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>`;
+            } else {
+                 sendBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
+            }
+        }
+
+        function appendMessage(data, sender) {
+            const messageWrapper = document.createElement('div');
+            
+            if (sender === 'user') {
+                // For the user, 'data' is a simple string.
+                messageWrapper.className = 'user-message flex justify-end';
+                messageWrapper.innerHTML = `
+                    <div class="bg-gray-200 text-gray-800 p-3 rounded-lg rounded-br-none max-w-md shadow">
+                        <p>${data}</p>
+                    </div>`;
+            } else { // sender is 'bot'
+                // For the bot, 'data' is the object {text: "...", songs: [...]}.
+                messageWrapper.className = 'bot-message';
+                
+                let botHtml = `<p>${data.text}</p>`; // Display the main text response.
+                
+                // If there's a list of songs, loop through it and build the HTML.
+                if (data.songs && data.songs.length > 0) {
+                    let songListHtml = '<div class="mt-2 space-y-1">';
+                    data.songs.forEach(item => {
+                        // Create a new line for each song.
+                        songListHtml += `<p class="text-sm pl-2">&gt; ${item.song} by ${item.artist}</p>`;
+                    });
+                    songListHtml += '</div>';
+                    botHtml += songListHtml; // Append the song list to the main text.
+                }
+                
+                messageWrapper.innerHTML = `
+                    <div class="bg-blue-500 text-white p-3 rounded-lg rounded-bl-none max-w-md shadow">
+                        ${botHtml}
+                    </div>`;
+            }
+
+            chatbox.querySelector('.flex.flex-col.gap-4').appendChild(messageWrapper);
+            // Scroll to the bottom of the chatbox to show the latest message.
+            chatbox.scrollTop = chatbox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
+
